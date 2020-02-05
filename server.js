@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const app = express();
 const faker = require("faker");
 const Movies = require("./models/Movies");
+const Directors = require("./models/Directors");
 
 mongoose
   .connect("mongodb://localhost/movies", {
@@ -43,10 +44,17 @@ app.get("/cities", (request, response) => {
 });
 
 app.get("/movies", (req, res) => {
+  let allMovies, allDirectors;
+
   Movies.find()
-    // .select({ title: 1 })
-    .then(allMovies => {
-      console.log(allMovies);
+    .then(allMoviesPayload => {
+      allMovies = allMoviesPayload;
+
+      return Directors.find();
+    })
+    .then(allDirectorsPayload => {
+      allDirectors = allDirectorsPayload;
+
       res.write(`<!DOCTYPE html>
     <html lang="en">
     <head>
@@ -56,7 +64,16 @@ app.get("/movies", (req, res) => {
         <title>Document</title>
     </head>
     <body>
-        <h1>Total movies: ${allMovies.length}</h1>
+        <h1>All directors: ${allDirectors.length}</h1>
+
+        <ul>
+        ${allDirectors.map(
+          director =>
+            `<li><a href="http://localhost:3000/directorDetail/${director._id}">${director.name}</a></li>`
+        )}</ul>
+
+        <h1>All movies: ${allMovies.length}</h1>
+
       <ul>${allMovies.map(
         movie =>
           `<li><a href="http://localhost:3000/movieDetail/${movie._id}">${movie.title}</a> <a href="http://localhost:3000/deleteMovie/${movie._id}">🗑</a></li>`
