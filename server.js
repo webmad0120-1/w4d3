@@ -1,96 +1,169 @@
 const express = require("express");
+const mongoose = require("mongoose");
 const app = express();
-const hbs = require("hbs");
-const PORT = 3000;
+const faker = require("faker");
+const Movies = require("./models/Movies");
 
-app.set("views", __dirname + "/views");
-app.set("view engine", "hbs");
-hbs.registerPartials(__dirname + "/views/partials");
+mongoose
+  .connect("mongodb://localhost/movies", {
+    useCreateIndex: true,
+    useNewUrlParser: true,
+    useUnifiedTopology: true
+  })
+  .then(x => console.log(`Connected to Mongo! Database name: "${x.connections[0].name}"`))
+  .catch(err => console.error("Error connecting to mongo", err));
 
-// Model
-// View
-// Controller <------
-app.get("/hello", (req, res) => {
-  const student = {
-    name: "Soni :)",
-    salary: parseInt(Math.random() * 50000),
-    htmlPiece: "<script>malicious code here</script>",
-    cities: ["Miami", "Madrid", "Barcelona", "Paris", "México", "Berlín"],
-    citiesWithObjs: [
-      {
-        name: "Valencia",
-        code: "5dca8e5545b84480e22b665d"
-      },
-      {
-        name: "Valencia de Venezuela",
-        code: "5dca8e5545b84480e22b6666"
-      }
-    ],
-    address: {
-      street: "1 canada square",
-      city: "london"
-    }
-  };
+function getCities() {
+  // in real life this would be replaced by a database call
+  let cities = ["Miami", "Madrid", "Barcelona", "Buenos Aires"];
 
-  if (student.hasOwnProperty("name")) {
-    student.nameExists = true;
-  } else {
-    student.nameExists = false;
-  }
+  return cities;
+}
+// as per the learning unit MVC pattern image -> https://i.imgur.com/LUhoPkS.png
+// controller
+app.get("/cities", (request, response) => {
+  //data generation --> model
+  let modelData = getCities();
 
-  if (student.citiesWithObjs.length === 0) {
-    student.citiesWithObjsExists = false;
-  } else {
-    student.citiesWithObjsExists = true;
-  }
+  //view preparation and render
+  let html = modelData.map(city => `<li>${city}</li>`);
 
-  res.render("helloView", student);
+  response.write(`<!DOCTYPE html>
+  <html lang="en">
+  <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta http-equiv="X-UA-Compatible" content="ie=edge">
+      <title>Document</title>
+  </head>
+  <body>
+    <h1>${html}</h1>
+  </body>
+  </html>`);
 });
 
-// if you wanted to retrieve periodically this data from the front end
-// you could implement a script like this in your front
-/*setInterval(() => {
-    fetch("http://localhost:3000/getLatestData")
-    .then(data => data.json())
-    .then(data => console.log(data))
-}, 1000)*/
-app.get("/getLatestData", (req, res) => {
-  res.json({
-    apple: Math.round(Math.random() * 100),
-    google: Math.round(Math.random() * 100),
-    canarias: Math.round(Math.random() * 100)
+app.get("/movies", (req, res) => {
+  Movies.find()
+    // .select({ title: 1 })
+    .then(allMovies => {
+      console.log(allMovies);
+      res.write(`<!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="X-UA-Compatible" content="ie=edge">
+        <title>Document</title>
+    </head>
+    <body>
+        <h1>Total movies: ${allMovies.length}</h1>
+      <ul>${allMovies.map(
+        movie =>
+          `<li><a href="http://localhost:3000/movieDetail/${movie._id}">${movie.title}</a> <a href="http://localhost:3000/deleteMovie/${movie._id}">🗑</a></li>`
+      )}</ul>
+    </body>
+    </html>`);
+    });
+});
+
+app.get("/deleteMovie/:movieId", (req, res) => {
+  Movies.findByIdAndDelete(req.params.movieId).then(() => {
+    // offering feedback to the user
+    // res.write(`<!DOCTYPE html>
+    //     <html lang="en">
+    //     <head>
+    //         <meta charset="UTF-8">
+    //         <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    //         <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    //         <title>Document</title>
+    //     </head>
+    //     <body>
+    //         <a href="http://localhost:3000/movies">Back to all movies, molas mazo</a>
+    //       <h1>Movie with id ${req.params.movieId} has been deleted</h1>
+    //     </body>
+    //     </html>`);
+
+    res.redirect("/movies");
   });
 });
 
-function randomInt(min, max) {
-  return Math.floor(Math.random() * (max - min + 1) + min);
-}
-
-app.get("/contact", (req, res) => {
-  res.render("contact");
-  // pass layout false should you want to discard the common layout
-  //   res.render("contact", { layout: false });
+app.get("/movieDetail/:movieId", (req, res) => {
+  Movies.findById(req.params.movieId).then(allMovieDetails => {
+    res.write(`<!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="X-UA-Compatible" content="ie=edge">
+        <title>Document</title>
+    </head>
+    <body>
+      <h1>${allMovieDetails.title}</h1>
+      <h2>${allMovieDetails.year}</h2>
+      <h3>Director: ${allMovieDetails.director}</h3>
+    </body>
+    </html>`);
+  });
 });
 
-app.get("/players", (req, res) => {
-  let players = Array(5)
-    .fill()
-    .map((_, idx) => {
-      let player = {
-        name: "Player " + (idx + 1),
-        age: randomInt(20, 30),
-        rebounds: randomInt(0, 100)
-      };
+app.get("/moviesByYear/:year?", (req, res) => {
+  console.log(req.params.year);
 
-      return player;
+  Movies.find(req.params.year === undefined ? {} : { year: +req.params.year })
+    // .select({ title: 1 })
+    .then(allMovies => {
+      console.log(allMovies);
+      res.write(`<!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <meta http-equiv="X-UA-Compatible" content="ie=edge">
+            <title>Document</title>
+        </head>
+        <body>
+          <h1>Total movies ${allMovies.length}</h1>
+          <ul>${allMovies.map(
+            movie =>
+              `<li><a href="http://localhost:3000/movieDetail/${movie._id}">${movie.title} (${movie.year})</a></li>`
+          )}</ul>
+        </body>
+        </html>`);
     });
-  // whatever is better for you (both options are valid!)
-  //   res.render("players", { data: players });
-
-  //es6 way
-  res.render("players", { players });
 });
 
-app.listen(PORT, () => {
-  console.log(`Listening on port ${PORT}`);
+app.get("/updateMovie", (req, res) => {
+  Movies.findByIdAndUpdate("5dcbee1045b84480e22b6e3a", {
+    title: "Matrix updated" + Math.random()
+  }).then(() => {
+    res.redirect("/movies");
+  });
+});
+
+const randomInt = (min, max) => Math.floor(Math.random() * (max - min + 1) + min);
+
+app.get("/addMovie", (req, res) => {
+  Movies.create({
+    title: `${faker.commerce.product()} ${faker.commerce.product()} ${faker.commerce.product()}`,
+    year: randomInt(1980, 2020),
+    director: `${faker.name.findName()}`
+  }).then(movieCreated => {
+    res.write(`
+        <!DOCTYPE html>
+  <html lang="en">
+  <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta http-equiv="X-UA-Compatible" content="ie=edge">
+      <title>Document</title>
+  </head>
+  <body>
+      <h1>Movie created! ${movieCreated.title}</h1>
+  </body>
+  </html>`);
+  });
+});
+
+app.listen(3000, () => {
+  console.log("listening to port 3000");
 });
